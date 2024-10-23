@@ -30,9 +30,9 @@
 
 `php artisan storage:link`
 
-
 **Требования к оснастке:**
 
 - php 8.3.10 или выше
 - composer 2.7.9 или выше
 - npm 10.9.0 или выше
+- Laravel Framework 11.29.0
