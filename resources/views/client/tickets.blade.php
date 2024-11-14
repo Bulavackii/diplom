@@ -48,6 +48,6 @@
 
     @push('styles')
         <!-- Подключение стилей для страницы "Мои билеты" -->
-        <link rel="stylesheet" href="{{ asset('client/css/index.css') }}">
+        <link rel="stylesheet" href="{{ asset('client/css/tickets.css') }}">
     @endpush
 @endsection

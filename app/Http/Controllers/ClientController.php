@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Seance;
 use App\Models\Ticket;
 use App\Models\Movie;
+use App\Models\Seat;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -18,11 +19,11 @@ class ClientController extends Controller
     // Главная страница с расписанием фильмов
     public function index()
     {
-        // Получаем сеансы, которые еще не начались, сортируем по времени начала
+        // Получаем сеансы, которые ещё не начались, сортируем по времени начала
         $sessions = Seance::with(['movie', 'cinemaHall'])
-                          ->where('start_time', '>=', now())
-                          ->orderBy('start_time', 'asc')
-                          ->get();
+            ->where('start_time', '>=', now())
+            ->orderBy('start_time', 'asc')
+            ->get();
 
         // Группируем сеансы по ID фильмов
         $movies = $sessions->groupBy('movie_id');
@@ -39,35 +40,37 @@ class ClientController extends Controller
                 $query->where('is_active', true); // Только активные залы
             })
             ->findOrFail($id);
-    
-        $rows = $session->cinemaHall->rows;
-        $seatsPerRow = $session->cinemaHall->seats_per_row;
+
+        // Получаем места зала
+        $seats = Seat::where('cinema_hall_id', $session->cinema_hall_id)
+            ->orderBy('row')
+            ->orderBy('number')
+            ->get();
 
         // Получаем занятые места для данного сеанса
-        $bookedSeats = Ticket::where('seance_id', $session->id)->get(['seat_row', 'seat_number']);
-    
+        $bookedSeats = Ticket::where('seance_id', $session->id)
+            ->get(['seat_row', 'seat_number']);
+
         // Отключаем кеширование страницы
         return response()
-            ->view('client.hall', compact('session', 'rows', 'seatsPerRow', 'bookedSeats'))
+            ->view('client.hall', compact('session', 'seats', 'bookedSeats'))
             ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
             ->header('Pragma', 'no-cache')
             ->header('Expires', '0');
-    }    
+    }
 
     // Обработка завершения бронирования билетов
     public function completeBooking(Request $request)
     {
         // Валидация данных бронирования
         $request->validate([
-            'session_id' => 'required|exists:seances,id',
+            'session_id'     => 'required|exists:seances,id',
             'selected_seats' => 'required|string', // Строка с выбранными местами
-            'seat_type' => 'required|in:regular,vip', // Тип места: обычное или VIP
         ]);
 
         // Поиск сеанса
         $session = Seance::findOrFail($request->session_id);
         $selectedSeats = explode(',', $request->selected_seats); // Разбиваем строку мест
-        $seatType = $request->seat_type;
 
         $userId = Auth::id(); // ID текущего пользователя
         $ticketIds = []; // Массив для хранения ID созданных билетов
@@ -85,18 +88,30 @@ class ClientController extends Controller
                 return redirect()->back()->withErrors(['Место ряд ' . $row . ', место ' . $number . ' уже занято.']);
             }
 
+            // Получаем тип места из таблицы seats
+            $seatInfo = Seat::where('cinema_hall_id', $session->cinema_hall_id)
+                ->where('row', $row)
+                ->where('number', $number)
+                ->first();
+
+            if (!$seatInfo || $seatInfo->seat_type == 'none') {
+                return redirect()->back()->withErrors(['Место ряд ' . $row . ', место ' . $number . ' недоступно для бронирования.']);
+            }
+
+            $seatType = $seatInfo->seat_type;
+
             // Определяем цену места в зависимости от типа
             $price = $seatType === 'vip' ? $session->price_vip : $session->price_regular;
 
             // Создаем новый билет
             $ticket = Ticket::create([
-                'seance_id' => $session->id,
-                'user_id' => $userId,
-                'seat_row' => $row,
+                'seance_id'   => $session->id,
+                'user_id'     => $userId,
+                'seat_row'    => $row,
                 'seat_number' => $number,
-                'seat_type' => $seatType,
-                'price' => $price,
-                'qr_code' => '', // QR-код заполним позже
+                'seat_type'   => $seatType,
+                'price'       => $price,
+                'qr_code'     => '', // QR-код заполним позже
             ]);
 
             $ticketIds[] = $ticket->id; // Сохраняем ID билета
@@ -116,7 +131,7 @@ class ClientController extends Controller
                 ->margin(10)
                 ->build();
 
-            // Создаем директорию для QR-кодов, если ее нет
+            // Создаем директорию для QR-кодов, если её нет
             if (!file_exists(public_path('qrcodes'))) {
                 mkdir(public_path('qrcodes'), 0755, true);
             }
@@ -134,10 +149,9 @@ class ClientController extends Controller
 
         // Возвращаем страницу с билетами и QR-кодом
         return view('client.ticket', [
-            'session' => $session,
-            'seats' => $tickets,
+            'session'      => $session,
+            'tickets'      => $tickets,
             'booking_code' => strtoupper(Str::random(8)) . "-S{$session->id}", // Код бронирования
-            'qrCodeUrl' => asset($tickets->first()->qr_code), // URL QR-кода для первого билета
         ]);
     }
 

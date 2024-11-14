@@ -31,31 +31,24 @@
                         <!-- Поле ввода для названия зала -->
                         <div class="mb-3">
                             <label for="name" class="form-label">Название зала:</label>
-                            <input type="text" class="form-control @error('name') is-invalid @enderror" name="name" id="name" value="{{ old('name') }}" required>
-                            <!-- Сообщение об ошибке для названия зала -->
-                            @error('name')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <input type="text" class="form-control" name="name" id="name" value="{{ old('name') }}" required>
                         </div>
 
                         <!-- Поле ввода для количества рядов -->
                         <div class="mb-3">
                             <label for="rows" class="form-label">Количество рядов:</label>
-                            <input type="number" class="form-control @error('rows') is-invalid @enderror" name="rows" id="rows" value="{{ old('rows') }}" min="1" required>
-                            <!-- Сообщение об ошибке для количества рядов -->
-                            @error('rows')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <input type="number" class="form-control" name="rows" id="rows" value="{{ old('rows') }}" min="1" required>
                         </div>
 
                         <!-- Поле ввода для количества мест в ряду -->
                         <div class="mb-3">
                             <label for="seats_per_row" class="form-label">Количество мест в ряду:</label>
-                            <input type="number" class="form-control @error('seats_per_row') is-invalid @enderror" name="seats_per_row" id="seats_per_row" value="{{ old('seats_per_row') }}" min="1" required>
-                            <!-- Сообщение об ошибке для количества мест -->
-                            @error('seats_per_row')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <input type="number" class="form-control" name="seats_per_row" id="seats_per_row" value="{{ old('seats_per_row') }}" min="1" required>
+                        </div>
+
+                        <!-- Сообщение о создании мест -->
+                        <div class="alert alert-info">
+                            После создания зала все места будут автоматически добавлены с типом "Обычное". Вы сможете изменить типы мест в режиме редактирования зала.
                         </div>
 
                         <!-- Кнопки управления формой: отмена, очистить, добавить -->

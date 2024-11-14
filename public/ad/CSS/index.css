@@ -317,3 +317,42 @@ th, td {
         padding: 6px 10px;
     }
 }
+
+.seat-number {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    text-align: center;
+    border-radius: 5px;
+    color: #fff;
+    font-weight: bold;
+}
+
+.seat-number.regular {
+    background-color: #28a745; /* Зеленый для обычных мест */
+}
+
+.seat-number.vip {
+    background-color: #ffc107; /* Желтый для VIP мест */
+    color: #000;
+}
+
+.seat-number.booked {
+    background-color: #dc3545; /* Красный для забронированных мест */
+}
+
+.empty-seat {
+    width: 40px;
+    height: 40px;
+    margin: 5px;
+    background-color: transparent;
+}
+
+.seat input[type="checkbox"] {
+    display: none;
+}
+
+.seat-number:hover {
+    opacity: 0.8;
+}

@@ -1,17 +1,17 @@
 <?php
 
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+class CreateTicketsTable extends Migration
 {
     /**
      * Run the migrations.
      */
-    public function up(): void
+    public function up()
     {
-        // Убедимся, что таблица tickets создается единожды
         Schema::create('tickets', function (Blueprint $table) {
             $table->id(); // ID билета
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade'); // Внешний ключ на таблицу пользователей
@@ -26,8 +26,8 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('tickets');
     }
-};
+}

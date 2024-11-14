@@ -55,8 +55,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/store', [AdminController::class, 'storeHall'])->name('store'); // Сохранение зала
         Route::get('/{hall}/edit', [AdminController::class, 'editHallForm'])->name('edit'); // Форма редактирования зала
         Route::put('/{hall}', [AdminController::class, 'updateHall'])->name('update'); // Обновление зала
-        Route::delete('/{hall}', [AdminController::class, 'deleteHall'])->name('destroy'); // Удаление зала
+        Route::delete('/{hall}', [AdminController::class, 'destroyHall'])->name('destroy'); // Удаление зала
         Route::post('/{hall}/toggle', [AdminController::class, 'toggleHallActivation'])->name('toggle'); // Активация/деактивация зала
+        Route::post('{hall}/generate-seats', [AdminController::class, 'generateSeatsForHall'])->name('generate_seats');
     });
 
     // Управление сеансами

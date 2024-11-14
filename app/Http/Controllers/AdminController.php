@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Seance;
 use App\Models\Movie;
 use App\Models\CinemaHall;
+use App\Models\Seat;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -17,7 +18,7 @@ class AdminController extends Controller
     {
         // Получаем все сеансы с подгруженными данными о фильмах и залах
         $movieSessions = Seance::with('movie', 'cinemaHall')->orderBy('start_time', 'asc')->paginate(10);
-        
+
         // Получаем количество администраторов и зрителей
         $adminsCount = User::where('role', 'admin')->count();
         $guestsCount = User::where('role', 'guest')->count();
@@ -44,12 +45,12 @@ class AdminController extends Controller
     {
         // Валидация данных фильма
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
+            'title'       => 'required|string|max:255',
             'description' => 'nullable|string',
-            'country' => 'required|string|max:255',
-            'genre' => 'required|string|max:255',
-            'duration' => 'required|integer|min:1|max:500',
-            'poster' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'country'     => 'required|string|max:255',
+            'genre'       => 'required|string|max:255',
+            'duration'    => 'required|integer|min:1|max:500',
+            'poster'      => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         // Создание нового фильма
@@ -72,12 +73,12 @@ class AdminController extends Controller
     {
         // Валидация данных фильма
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
+            'title'       => 'required|string|max:255',
             'description' => 'nullable|string',
-            'country' => 'required|string|max:255',
-            'genre' => 'required|string|max:255',
-            'duration' => 'required|integer|min:1|max:500',
-            'poster' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'country'     => 'required|string|max:255',
+            'genre'       => 'required|string|max:255',
+            'duration'    => 'required|integer|min:1|max:500',
+            'poster'      => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
         // Обновление данных фильма
@@ -87,9 +88,8 @@ class AdminController extends Controller
         if ($request->hasFile('poster')) {
             // Удаляем старый постер, если он существует
             if ($movie->poster_url) {
-                $posterPath = str_replace('storage/', 'public/', $movie->poster_url); 
+                $posterPath = str_replace('/storage/', 'public/', $movie->poster_url);
                 if (Storage::exists($posterPath)) {
-                    Log::info('Удаляем старый постер по пути: ' . $posterPath);
                     Storage::delete($posterPath);
                 }
             }
@@ -101,7 +101,7 @@ class AdminController extends Controller
         // Сохранение обновленного фильма
         $movie->save();
 
-        return redirect()->route('admin.movies.index')->with('success', 'Фильм успешно обновлен!');
+        return redirect()->route('admin.movies.index')->with('success', 'Фильм успешно обновлён!');
     }
 
     // Управление пользователями
@@ -116,12 +116,12 @@ class AdminController extends Controller
         if ($searchTerm) {
             $adminsQuery->where(function ($query) use ($searchTerm) {
                 $query->where('name', 'like', '%' . $searchTerm . '%')
-                      ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                    ->orWhere('email', 'like', '%' . $searchTerm . '%');
             });
 
             $guestsQuery->where(function ($query) use ($searchTerm) {
                 $query->where('name', 'like', '%' . $searchTerm . '%')
-                      ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                    ->orWhere('email', 'like', '%' . $searchTerm . '%');
             });
         }
 
@@ -136,11 +136,7 @@ class AdminController extends Controller
     public function toggleRole(User $user)
     {
         // Переключаем роль пользователя между 'admin' и 'guest'
-        if ($user->isAdmin()) {
-            $user->role = 'guest';
-        } else {
-            $user->role = 'admin';
-        }
+        $user->role = $user->isAdmin() ? 'guest' : 'admin';
 
         // Сохраняем обновленную роль
         $user->save();
@@ -166,36 +162,86 @@ class AdminController extends Controller
     {
         // Валидация данных зала
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'rows' => 'required|integer|min:1',
+            'name'          => 'required|string|max:255',
+            'rows'          => 'required|integer|min:1',
             'seats_per_row' => 'required|integer|min:1',
         ]);
 
         // Создание нового зала
-        CinemaHall::create($validated);
+        $cinemaHall = CinemaHall::create($validated);
+
+        // Генерация мест с типом 'regular' по умолчанию
+        for ($row = 1; $row <= $cinemaHall->rows; $row++) {
+            for ($number = 1; $number <= $cinemaHall->seats_per_row; $number++) {
+                Seat::create([
+                    'cinema_hall_id' => $cinemaHall->id,
+                    'row'            => $row,
+                    'number'         => $number,
+                    'seat_type'      => 'regular', // По умолчанию обычные места
+                ]);
+            }
+        }
 
         return redirect()->route('admin.halls.index')->with('success', 'Зал успешно создан!');
     }
 
+    public function generateSeatsForHall(CinemaHall $hall)
+    {
+        // Проверяем, есть ли уже места для зала
+        if ($hall->seats()->exists()) {
+            return redirect()->back()->with('warning', 'Для этого зала места уже существуют.');
+        }
+
+        // Генерируем места
+        for ($row = 1; $row <= $hall->rows; $row++) {
+            for ($number = 1; $number <= $hall->seats_per_row; $number++) {
+                Seat::create([
+                    'cinema_hall_id' => $hall->id,
+                    'row'            => $row,
+                    'number'         => $number,
+                    'seat_type'      => 'regular', // По умолчанию обычные места
+                ]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Места для зала успешно сгенерированы.');
+    }
+
     public function editHallForm(CinemaHall $hall)
     {
-        // Отображаем форму для редактирования зала
-        return view('admin.halls.edit', compact('hall'));
+        // Получаем места зала и передаём их в представление
+        $seats = $hall->seats()->orderBy('row')->orderBy('number')->get();
+
+        return view('admin.halls.edit', compact('hall', 'seats'));
     }
 
     public function updateHall(Request $request, CinemaHall $hall)
     {
         // Валидация данных зала
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'rows' => 'required|integer|min:1',
+            'name'          => 'required|string|max:255',
+            'rows'          => 'required|integer|min:1',
             'seats_per_row' => 'required|integer|min:1',
+            'seats'         => 'required|array',
+            'seats.*.id'    => 'required|exists:seats,id',
+            'seats.*.seat_type' => 'required|in:regular,vip,none',
         ]);
 
         // Обновление данных зала
-        $hall->update($validated);
+        $hall->update([
+            'name'          => $validated['name'],
+            'rows'          => $validated['rows'],
+            'seats_per_row' => $validated['seats_per_row'],
+        ]);
 
-        return redirect()->route('admin.halls.index')->with('success', 'Зал успешно обновлен.');
+        // Обновление типов мест
+        foreach ($validated['seats'] as $seatData) {
+            $seat = Seat::find($seatData['id']);
+            $seat->seat_type = $seatData['seat_type'];
+            $seat->save();
+        }
+
+        return redirect()->route('admin.halls.index')->with('success', 'Зал успешно обновлён.');
     }
 
     public function toggleHallActivation(CinemaHall $hall)
@@ -207,6 +253,23 @@ class AdminController extends Controller
         // Сообщение об активации/деактивации зала
         $status = $hall->is_active ? 'активирован' : 'деактивирован';
         return redirect()->route('admin.halls.index')->with('status', "Зал успешно {$status}");
+    }
+
+    // Удаление зала
+    public function destroyHall(CinemaHall $hall)
+    {
+        // Проверяем, есть ли связанные сеансы с этим залом
+        if ($hall->seances()->exists()) {
+            return redirect()->route('admin.halls.index')->with('error', 'Невозможно удалить зал, так как с ним связаны сеансы.');
+        }
+
+        // Удаление всех мест в зале
+        $hall->seats()->delete();
+
+        // Удаление самого зала
+        $hall->delete();
+
+        return redirect()->route('admin.halls.index')->with('success', 'Зал успешно удалён!');
     }
 
     // Управление сеансами
@@ -230,11 +293,10 @@ class AdminController extends Controller
         // Валидация данных сеанса
         $validated = $request->validate([
             'cinema_hall_id' => 'required|exists:cinema_halls,id',
-            'movie_id' => 'required|exists:movies,id',
-            'start_time' => 'required|date|after:now',
-            'end_time' => 'required|date|after:start_time',
-            'price_regular' => 'required|numeric|min:0|max:10000',
-            'price_vip' => 'required|numeric|min:0|max:20000',
+            'movie_id'       => 'required|exists:movies,id',
+            'start_time'     => 'required|date|after:now',
+            'price_regular'  => 'required|numeric|min:0|max:10000',
+            'price_vip'      => 'required|numeric|min:0|max:20000',
         ]);
 
         // Создание нового сеанса
@@ -256,17 +318,16 @@ class AdminController extends Controller
         // Валидация данных сеанса
         $validated = $request->validate([
             'cinema_hall_id' => 'required|exists:cinema_halls,id',
-            'movie_id' => 'required|exists:movies,id',
-            'start_time' => 'required|date|after:now',
-            'end_time' => 'required|date|after:start_time',
-            'price_regular' => 'required|numeric|min:0|max:10000',
-            'price_vip' => 'required|numeric|min:0|max:20000',
+            'movie_id'       => 'required|exists:movies,id',
+            'start_time'     => 'required|date|after:now',
+            'price_regular'  => 'required|numeric|min:0|max:10000',
+            'price_vip'      => 'required|numeric|min:0|max:20000',
         ]);
 
         // Обновление данных сеанса
         $movieSession->update($validated);
 
-        return redirect()->route('admin.seances.index')->with('success', 'Сеанс успешно обновлен!');
+        return redirect()->route('admin.seances.index')->with('success', 'Сеанс успешно обновлён!');
     }
 
     public function deleteMovieSession(Seance $movieSession)

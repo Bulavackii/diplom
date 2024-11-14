@@ -58,4 +58,9 @@ class CinemaHall extends Model
         // Возвращает текущий статус активации зала
         return $this->is_active;
     }
+
+    public function seats()
+    {
+        return $this->hasMany(Seat::class);
+    }
 }

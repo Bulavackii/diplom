@@ -6,21 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Models\Seance;
 use App\Models\Movie;
 use App\Models\CinemaHall;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class SeanceController extends Controller
 {
     /**
      * Отображает список сеансов с пагинацией.
-     *
-     * @return \Illuminate\View\View
      */
     public function index()
     {
         // Получаем сеансы с их фильмами и залами, сортируем по времени начала
         $seances = Seance::with(['movie', 'cinemaHall'])
-                         ->orderBy('start_time', 'asc') // Сортировка по возрастанию времени начала сеанса
-                         ->paginate(10); // Пагинация, выводим по 10 сеансов на страницу
+            ->orderBy('start_time', 'asc')
+            ->paginate(10);
 
         // Передаем данные о сеансах в представление
         return view('admin.seances.index', compact('seances'));
@@ -28,8 +27,6 @@ class SeanceController extends Controller
 
     /**
      * Показывает форму для создания нового сеанса.
-     *
-     * @return \Illuminate\View\View
      */
     public function create()
     {
@@ -43,34 +40,54 @@ class SeanceController extends Controller
 
     /**
      * Сохраняет новый сеанс в базе данных.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\RedirectResponse
      */
     public function store(Request $request)
     {
         // Валидация входных данных запроса
         $validated = $request->validate([
-            'cinema_hall_id' => 'required|exists:cinema_halls,id', // Проверяем, что зал существует
-            'movie_id' => 'required|exists:movies,id', // Проверяем, что фильм существует
-            'start_time' => 'required|date|after:now', // Начало сеанса должно быть позже текущего времени
-            'end_time' => 'required|date|after:start_time', // Конец сеанса должен быть позже начала
-            'price_regular' => 'required|numeric|min:0', // Цена для обычных мест не может быть меньше нуля
-            'price_vip' => 'required|numeric|min:0', // Цена для VIP мест не может быть меньше нуля
+            'cinema_hall_id' => 'required|exists:cinema_halls,id',
+            'movie_id'       => 'required|exists:movies,id',
+            'start_time'     => 'required|date|after:now',
+            'price_regular'  => 'required|numeric|min:0',
+            'price_vip'      => 'required|numeric|min:0',
         ]);
 
-        // Создаем новый сеанс с валидированными данными
-        Seance::create($validated);
+        // Получаем данные о фильме
+        $movie = Movie::findOrFail($validated['movie_id']);
 
-        // Перенаправляем на страницу списка сеансов с сообщением об успешном создании
+        // Вычисляем время начала и окончания нового сеанса
+        $startTime = Carbon::parse($validated['start_time']);
+        $endTime   = $startTime->copy()->addMinutes($movie->duration);
+
+        // Проверка на пересечение с существующими сеансами в этом зале
+        $overlappingSeance = Seance::where('cinema_hall_id', $validated['cinema_hall_id'])
+            ->join('movies', 'seances.movie_id', '=', 'movies.id')
+            ->whereRaw(
+                'julianday(seances.start_time) < julianday(?) AND 
+                (julianday(seances.start_time) + movies.duration / 1440.0) > julianday(?)',
+                [$endTime->format('Y-m-d H:i:s'), $startTime->format('Y-m-d H:i:s')]
+            )
+            ->exists();
+
+        if ($overlappingSeance) {
+            return back()->withErrors(['start_time' => 'В указанное время уже есть сеанс в этом зале.'])->withInput();
+        }
+
+        // Создаем новый сеанс без сохранения end_time в базе данных
+        Seance::create([
+            'cinema_hall_id' => $validated['cinema_hall_id'],
+            'movie_id'       => $validated['movie_id'],
+            'start_time'     => $startTime,
+            'price_regular'  => $validated['price_regular'],
+            'price_vip'      => $validated['price_vip'],
+        ]);
+
+        // Перенаправляем с сообщением об успехе
         return redirect()->route('admin.seances.index')->with('success', 'Сеанс успешно создан!');
     }
 
     /**
      * Показывает форму для редактирования сеанса.
-     *
-     * @param  \App\Models\Seance  $seance
-     * @return \Illuminate\View\View
      */
     public function edit(Seance $seance)
     {
@@ -84,42 +101,62 @@ class SeanceController extends Controller
 
     /**
      * Обновляет сеанс в базе данных.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \App\Models\Seance  $seance
-     * @return \Illuminate\Http\RedirectResponse
      */
     public function update(Request $request, Seance $seance)
     {
         // Валидация входных данных запроса
         $validated = $request->validate([
-            'cinema_hall_id' => 'required|exists:cinema_halls,id', // Проверка, что зал существует
-            'movie_id' => 'required|exists:movies,id', // Проверка, что фильм существует
-            'start_time' => 'required|date|after:now', // Время начала должно быть позже текущего времени
-            'end_time' => 'required|date|after:start_time', // Время окончания должно быть позже времени начала
-            'price_regular' => 'required|numeric|min:0', // Обычная цена не может быть меньше нуля
-            'price_vip' => 'required|numeric|min:0', // Цена VIP не может быть меньше нуля
+            'cinema_hall_id' => 'required|exists:cinema_halls,id',
+            'movie_id'       => 'required|exists:movies,id',
+            'start_time'     => 'required|date|after:now',
+            'price_regular'  => 'required|numeric|min:0',
+            'price_vip'      => 'required|numeric|min:0',
         ]);
 
-        // Обновляем сеанс с валидированными данными
-        $seance->update($validated);
+        // Получаем данные о фильме
+        $movie = Movie::findOrFail($validated['movie_id']);
 
-        // Перенаправляем на страницу списка сеансов с сообщением об успешном обновлении
+        // Вычисляем новое время начала и окончания сеанса
+        $startTime = Carbon::parse($validated['start_time']);
+        $endTime   = $startTime->copy()->addMinutes($movie->duration);
+
+        // Проверка на пересечение с существующими сеансами в этом зале
+        $overlappingSeance = Seance::where('cinema_hall_id', $validated['cinema_hall_id'])
+            ->where('seances.id', '!=', $seance->id)
+            ->join('movies', 'seances.movie_id', '=', 'movies.id')
+            ->whereRaw(
+                'julianday(seances.start_time) < julianday(?) AND 
+                (julianday(seances.start_time) + movies.duration / 1440.0) > julianday(?)',
+                [$endTime->format('Y-m-d H:i:s'), $startTime->format('Y-m-d H:i:s')]
+            )
+            ->exists();
+
+        if ($overlappingSeance) {
+            return back()->withErrors(['start_time' => 'В указанное время уже есть сеанс в этом зале.'])->withInput();
+        }
+
+        // Обновляем сеанс без сохранения end_time в базе данных
+        $seance->update([
+            'cinema_hall_id' => $validated['cinema_hall_id'],
+            'movie_id'       => $validated['movie_id'],
+            'start_time'     => $startTime,
+            'price_regular'  => $validated['price_regular'],
+            'price_vip'      => $validated['price_vip'],
+        ]);
+
+        // Перенаправляем с сообщением об успехе
         return redirect()->route('admin.seances.index')->with('success', 'Сеанс успешно обновлён!');
     }
 
     /**
      * Удаляет сеанс из базы данных.
-     *
-     * @param  \App\Models\Seance  $seance
-     * @return \Illuminate\Http\RedirectResponse
      */
     public function destroy(Seance $seance)
     {
         // Удаляем сеанс
         $seance->delete();
 
-        // Перенаправляем на страницу списка сеансов с сообщением об успешном удалении
+        // Перенаправляем с сообщением об успехе
         return redirect()->route('admin.seances.index')->with('success', 'Сеанс успешно удалён!');
     }
 }
